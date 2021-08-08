@@ -1,88 +1,158 @@
 use std::env;
 use std::fs::File;
-use std::io::{Read,Write};
+use std::io::{Write,Read,stdin,stdout};
 
-const COPY_BYTES: usize = 1024 * 1024; // 1MiB
+const PRINT_LINES: u32 = 11;
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+  let args: Vec<String> = env::args().collect();
 
-    if args.len() != 3 {
-        println!["=============================="];
-        println!["rrrw [Raw Read Raw Write]"];
-        println!["Syntax: rrrw <InputFile> <OutputFile>"];
-        println!["Example: rrrw fedora.iso /dev/sde"];
-        println!["=============================="];
-        return
+  if args.len() != 5 {
+    println!["========================="];
+    println!["rrrw v1.0"];
+    println!["Syntax: rrrw <src> <dest> <Unit> <Chunksize>"];
+    println!["Example: rrrw srcfile.img /dev/sdc M 4"];
+    println![];
+    println!["Note:"];
+    println!["The <Chunksize> * <Unit> will be the allocated memory"];
+    println!["The result must not be larger than the physical RAM you have available"];
+    println!["========================="];
+    return
+  }
+
+  let src: &str = &args[1];
+  let dest: &str = &args[2];
+  let unit: &str = &args[3];
+  let mut chunksize: usize = match &args[4].parse() {
+    Ok(chunksize) => *chunksize,
+    Err(error) => {
+      eprintln!["Couldn't parse string to unsigned int {} [Error: {}]",args[4],error];
+      return
     }
+  };
 
-    let mut input_file: File = File::open(&args[1]).expect("Couldn't open input file");
-    let mut output_file: File = File::create(&args[2]).expect("Couldn't open output file");
-    let mut copy_content: Vec<u8> = vec![0;COPY_BYTES];
-    let mut written_bytes_total: u128 = 0;
-
-    loop {
-        let read_bytes: usize = match input_file.read(&mut copy_content) {
-            Ok(read_bytes) => read_bytes,
-            Err(error) => {
-                // Print trace
-                eprint!["\n\n\n\n\n\n"];
-                eprintln!["==================== [Read error]"];
-                eprintln!["input_file: {:?}",input_file];
-                eprintln!["output_file: {:?}",output_file];
-                eprintln!["written_bytes_total: {}",written_bytes_total];
-                eprintln!["Error: {}",error];
-                eprintln!["===================="];
-                eprint!["\n\n\n\n\n\n"];
-                panic![];
-            }
-        };
-
-        let written_bytes: usize = match output_file.write(&copy_content[..read_bytes]) {
-            Ok(written_bytes) => written_bytes,
-            Err(error) => {
-                // Print trace
-                eprint!["\n\n\n\n\n\n"];
-                eprintln!["==================== [Write error]"];
-                eprintln!["input_file: {:?}",input_file];
-                eprintln!["output_file: {:?}",output_file];
-                eprintln!["written_bytes_total: {}",written_bytes_total];
-                eprintln!["read_bytes: {}",read_bytes];
-                eprintln!["Error: {}",error];
-                eprintln!["===================="];
-                eprint!["\n\n\n\n\n\n"];
-                panic![];
-            }
-        };
-
-        output_file.sync_data().expect("Couldn't sync the data to the destination");
-        written_bytes_total += written_bytes as u128;
-        print_status(written_bytes_total);
-
-        if written_bytes != read_bytes {
-            // Didn't write all read bytes
-            panic!["Destination doesn't have enough space!"];
-        }
-        else if read_bytes != COPY_BYTES {
-            // Probably read the last bytes
-            break;
-        }
+  match unit {
+    "b" => {},
+    "B" => {},
+    "k" => chunksize *= 1000_usize,
+    "K" => chunksize *= 1024_usize,
+    "m" => chunksize *= 1000_usize.pow(2),
+    "M" => chunksize *= 1024_usize.pow(2),
+    "g" => chunksize *= 1000_usize.pow(3),
+    "G" => chunksize *= 1024_usize.pow(3),
+    "t" => chunksize *= 1000_usize.pow(4),
+    "T" => chunksize *= 1024_usize.pow(4),
+    _ => {
+      eprintln!["Invalid unit {}",unit];
+      return
     }
+  };
 
-    print!["\n\n\n\n\n"]; // Print 5 newlines to get to the end
+  let mut srcfile: File = match File::open(src) {
+    Ok(file) => file,
+    Err(error) => {
+      eprintln!["Couldn't open {} [Error: {}]",src,error];
+      return
+    }
+  };
+
+  let mut destfile: File = match File::create(dest) {
+    Ok(file) => file,
+    Err(error) => {
+      eprintln!["Couldn't open {} [Error: {}]",dest,error];
+      return
+    }
+  };
+
+  if !user_confirmation(src,dest) {
+    return
+  }
+
+  let mut read_bytes_total: usize = 0;
+  let mut memory: Vec<u8> = vec![0;chunksize];
+
+  print!["\n"];
+
+  loop {
+    let read_bytes: usize;
+
+    read_bytes = match srcfile.read(&mut memory) {
+      Ok(0) => break,
+      Ok(read_bytes) => read_bytes,
+      Err(error) => {
+        if error.kind() != std::io::ErrorKind::Interrupted {
+          break
+        }
+        0
+      }
+    };
+
+    read_bytes_total += read_bytes;
+
+    match destfile.write_all(&memory[..read_bytes]) {
+      Ok(()) => (),
+      Err(error) => {
+        for _ in 0..PRINT_LINES + 10 {
+          print!["\n"];
+        }
+        panic!["Couldn't write all read bytes into the destination [Error: {}]",error];
+      }
+    };
+
+    destfile.sync_data().unwrap();
+    print_status(read_bytes_total);
+  }
+
+  for _ in 0..PRINT_LINES {
+    print!["\n"];
+  }
 
 	print!["\n"];
 }
 
-fn print_status(bytes: u128) {
-	let kib: f64 = bytes as f64 / 1024f64;
-	let mib: f64 = bytes as f64 / 1048576f64; // 1024 * 1024 (1024^2)
-	let gib: f64 = bytes as f64 / 1073741824f64; // 1024 * 1024 * 1024 (1024^3)
-	let tib: f64 = bytes as f64 / 1099511627776f64; // 1024 * 1024 * 1024 * 1024 (1024^4)
-    println!["  B: {}",bytes];
-    println!["KiB: {}",kib];
-    println!["MiB: {}",mib];
-    println!["GiB: {}",gib];
-    println!["TiB: {}",tib];
-    print!["\r\x1b[5A"]; // Go five lines up
+fn print_status(bytes: usize) {
+  let kib: f64 = bytes as f64 / 1024_f64;
+  let mib: f64 = bytes as f64 / 1024_f64.powf(2_f64);
+  let gib: f64 = bytes as f64 / 1024_f64.powf(3_f64);
+  let tib: f64 = bytes as f64 / 1024_f64.powf(4_f64);
+  let kb: f64 = bytes as f64 / 1000_f64;
+  let mb: f64 = bytes as f64 / 1000_f64.powf(2_f64);
+  let gb: f64 = bytes as f64 / 1000_f64.powf(3_f64);
+  let tb: f64 = bytes as f64 / 1000_f64.powf(4_f64);
+
+  // Clear the lines before the print
+  for _ in 0..PRINT_LINES {
+	  println!["\x1B[2K"];
+	}
+  print!["\r\x1B[{}A",PRINT_LINES]; // Go lines up
+
+  println!["B: {}",bytes];
+  println![];
+  println!["KiB: {}",kib];
+  println!["MiB: {}",mib];
+  println!["GiB: {}",gib];
+  println!["TiB: {}",tib];
+  println![];
+  println!["KB: {}",kb];
+  println!["MB: {}",mb];
+  println!["GB: {}",gb];
+  println!["TB: {}",tb];
+  print!["\r\x1B[{}A",PRINT_LINES]; // Go lines up
+}
+
+fn user_confirmation(src: &str,dest: &str) -> bool {
+  print!["Copy {} to {}? [y,n] ",src,dest];
+  stdout().flush().expect("Couldn't flush stdout");
+
+  let mut userinput: String = String::new();
+  stdin().read_line(&mut userinput).expect("Coulnd't read from stdin");
+
+  userinput = userinput.replace("\n","");
+  userinput = userinput.replace("\r","");
+
+  if userinput == "y" || userinput == "Y" {
+    return true
+  }
+
+  return false
 }
