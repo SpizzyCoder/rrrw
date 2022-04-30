@@ -23,8 +23,12 @@ fn main() {
   let src: &str = &args[1];
   let dest: &str = &args[2];
   let unit: &str = &args[3];
-  let mut chunksize: usize = match &args[4].parse() {
-    Ok(chunksize) => *chunksize,
+  let mut chunksize: usize = match args[4].parse() {
+    Ok(0) => {
+      eprintln!["Chunksize can't be 0"];
+      return
+    },
+    Ok(chunksize) => chunksize,
     Err(error) => {
       eprintln!["Couldn't parse string to unsigned int {} [Error: {}]",args[4],error];
       return
