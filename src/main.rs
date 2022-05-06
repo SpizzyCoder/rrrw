@@ -9,9 +9,9 @@ fn main() {
 
   if args.len() != 5 {
     println!["========================="];
-    println!["rrrw v1.0"];
-    println!["Syntax: rrrw <src> <dest> <Unit> <Chunksize>"];
-    println!["Example: rrrw srcfile.img /dev/sdc M 4"];
+    println!["{} v{}",env!["CARGO_PKG_NAME"],env!["CARGO_PKG_VERSION"]];
+    println!["Syntax: {} <src> <dest> <Unit> <Chunksize>",env!["CARGO_PKG_NAME"]];
+    println!["Example: {} srcfile.img /dev/sdc M 4",env!["CARGO_PKG_NAME"]];
     println![];
     println!["Note:"];
     println!["The <Chunksize> * <Unit> will be the allocated memory"];
