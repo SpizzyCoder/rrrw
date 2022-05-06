@@ -16,6 +16,18 @@ fn main() {
     println!["Note:"];
     println!["The <Chunksize> * <Unit> will be the allocated memory"];
     println!["The result must not be larger than the physical RAM you have available"];
+    println![];
+    println!["Available units:"];
+    println!["b -> Bytes (<Chunksize> * 1)"];
+    println!["B -> Bytes (<Chunksize> * 1)"];
+    println!["k -> Kilobytes (<Chunksize> * 1000)"];
+    println!["K -> Kibibytes (<Chunksize> * 1024)"];
+    println!["m -> Megabytes (<Chunksize> * 1000^2)"];
+    println!["M -> Mibibytes (<Chunksize> * 1024^2)"];
+    println!["g -> Gigabytes (<Chunksize> * 1000^3)"];
+    println!["G -> Gibibytes (<Chunksize> * 1024^3)"];
+    println!["t -> Terabytes (<Chunksize> * 1000^4)"];
+    println!["T -> Tibibytes (<Chunksize> * 1024^4)"];
     println!["========================="];
     return
   }
