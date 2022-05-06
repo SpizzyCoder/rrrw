@@ -166,7 +166,7 @@ fn user_confirmation(src: &str,dest: &str) -> bool {
   userinput = userinput.replace("\n","");
   userinput = userinput.replace("\r","");
 
-  if userinput == "y" || userinput == "Y" {
+  if userinput.to_lowercase() == "y" {
     return true
   }
 
