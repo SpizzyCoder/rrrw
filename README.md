@@ -6,7 +6,7 @@ It can also be used to write an image to a disk.
 
 # Building
 ```
-git clone https://gitlab.com/SpizzyCoder/rrrw.git
+git clone https://github.com/SpizzyCoder/rrrw.git
 cd rrrw
 cargo build --release
 ```
