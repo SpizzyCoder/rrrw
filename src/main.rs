@@ -1,91 +1,95 @@
-use std::env;
 use std::fs::File;
 use std::io::{Write,Read,stdin,stdout};
+use std::path::Path;
+
+use clap::Parser;
+use clap::ArgEnum;
 
 const PRINT_LINES: u32 = 11;
 
-fn main() {
-  let args: Vec<String> = env::args().collect();
+#[derive(ArgEnum,Clone,Copy,Debug)]
+enum Unit {
+  B,
+  Kb,
+  Kib,
+  Mb,
+  Mib,
+  Gb,
+  Gib,
+  Tb,
+  Tib,
+}
 
-  if args.len() != 5 {
-    println!["========================="];
-    println!["{} v{}",env!["CARGO_PKG_NAME"],env!["CARGO_PKG_VERSION"]];
-    println!["Syntax: {} <src> <dest> <Unit> <Chunksize>",env!["CARGO_PKG_NAME"]];
-    println!["Example: {} srcfile.img /dev/sdc M 4",env!["CARGO_PKG_NAME"]];
-    println![];
-    println!["Note:"];
-    println!["The <Chunksize> * <Unit> will be the allocated memory"];
-    println!["The result must not be larger than the physical RAM you have available"];
-    println![];
-    println!["Available units:"];
-    println!["b -> Bytes (<Chunksize> * 1)"];
-    println!["B -> Bytes (<Chunksize> * 1)"];
-    println!["k -> Kilobytes (<Chunksize> * 1000)"];
-    println!["K -> Kibibytes (<Chunksize> * 1024)"];
-    println!["m -> Megabytes (<Chunksize> * 1000^2)"];
-    println!["M -> Mibibytes (<Chunksize> * 1024^2)"];
-    println!["g -> Gigabytes (<Chunksize> * 1000^3)"];
-    println!["G -> Gibibytes (<Chunksize> * 1024^3)"];
-    println!["t -> Terabytes (<Chunksize> * 1000^4)"];
-    println!["T -> Tibibytes (<Chunksize> * 1024^4)"];
-    println!["========================="];
+/// Simple program to copy raw bytes
+#[derive(Parser,Debug)]
+#[clap(version,about)]
+pub struct Args {
+  /// Unit
+  #[clap(short,long,arg_enum,default_value_t = Unit::B)]
+  unit: Unit,
+
+  /// Chunksize
+  #[clap(short,long,default_value_t = 1)]
+  chunksize: usize,
+
+  /// Source
+  #[clap()]
+  src: String,
+
+  /// Destination
+  #[clap()]
+  dest: String,
+}
+
+fn main() {
+  let args: Args = Args::parse();
+
+  let src_path: &Path = Path::new(&args.src);
+  let dest_path: &Path = Path::new(&args.dest);
+  if !src_path.exists() {
+    eprintln!["{} doesn't exist",src_path.display()];
     return
   }
 
-  let src: &str = &args[1];
-  let dest: &str = &args[2];
-  let unit: &str = &args[3];
-  let mut chunksize: usize = match args[4].parse() {
-    Ok(0) => {
-      eprintln!["Chunksize can't be 0"];
-      return
-    },
-    Ok(chunksize) => chunksize,
-    Err(error) => {
-      eprintln!["Couldn't parse string to unsigned int {} [Error: {}]",args[4],error];
-      return
-    }
+  if args.chunksize < 1 {
+    eprintln!["Chunksize can't be 0 or negative"];
+    return
+  }
+
+  let write_block = match args.unit {
+    Unit::B => args.chunksize * 1,
+    Unit::Kb => args.chunksize * 1000,
+    Unit::Kib => args.chunksize * 1024,
+    Unit::Mb => args.chunksize * 1000_usize.pow(2),
+    Unit::Mib => args.chunksize * 1024_usize.pow(2),
+    Unit::Gb => args.chunksize * 1000_usize.pow(3),
+    Unit::Gib => args.chunksize * 1024_usize.pow(3),
+    Unit::Tb => args.chunksize * 1000_usize.pow(4),
+    Unit::Tib => args.chunksize * 1024_usize.pow(4),
   };
 
-  match unit {
-    "b" => {},
-    "B" => {},
-    "k" => chunksize *= 1000_usize,
-    "K" => chunksize *= 1024_usize,
-    "m" => chunksize *= 1000_usize.pow(2),
-    "M" => chunksize *= 1024_usize.pow(2),
-    "g" => chunksize *= 1000_usize.pow(3),
-    "G" => chunksize *= 1024_usize.pow(3),
-    "t" => chunksize *= 1000_usize.pow(4),
-    "T" => chunksize *= 1024_usize.pow(4),
-    _ => {
-      eprintln!["Invalid unit {}",unit];
-      return
-    }
-  };
-
-  let mut srcfile: File = match File::open(src) {
+  let mut srcfile: File = match File::open(src_path) {
     Ok(file) => file,
     Err(error) => {
-      eprintln!["Couldn't open {} [Error: {}]",src,error];
+      eprintln!["Couldn't open {} [Error: {}]",src_path.display(),error];
       return
     }
   };
 
-  let mut destfile: File = match File::create(dest) {
+  let mut destfile: File = match File::create(dest_path) {
     Ok(file) => file,
     Err(error) => {
-      eprintln!["Couldn't open {} [Error: {}]",dest,error];
+      eprintln!["Couldn't open {} [Error: {}]",dest_path.display(),error];
       return
     }
   };
 
-  if !user_confirmation(src,dest) {
+  if !user_confirmation(&args.src,&args.dest) {
     return
   }
 
   let mut read_bytes_total: usize = 0;
-  let mut memory: Vec<u8> = vec![0;chunksize];
+  let mut memory: Vec<u8> = vec![0;write_block];
 
   print!["\n"];
 
